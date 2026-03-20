@@ -116,8 +116,12 @@ import LabW26Page from './sources/1/LabW26Page';
 import SpringLabW26Page from './sources/1/SpringLabW26Page';
 import MotherlandPage from './sources/1/MotherlandPage';
 
+type LocationState = {
+  pageIndex: number;
+  showIndex: boolean;
+};
+
 export default function App() {
-  const [pageIndex, setPageIndex] = useState(0);
   const pages = [
     <LabW26Page key="labw26" />,
     <SpringLabW26Page key="springlabw26" />,
@@ -235,13 +239,45 @@ export default function App() {
     <AiMindsetManifestPage key="aimindsetmanifest" />,
     <AiMindsetBurgundyPage key="aimindsetburgundy" />
   ];
-  const currentPageNumber = pageIndex + 1;
+  const parseLocationState = (): LocationState => {
+    if (typeof window === 'undefined') {
+      return { pageIndex: 0, showIndex: false };
+    }
 
-  const [showIndex, setShowIndex] = useState(() => {
-    if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
-    return params.get('index') === '1' || window.location.hash === '#index';
-  });
+    const styleParam = Number.parseInt(params.get('style') ?? '', 10);
+    const safePageIndex =
+      Number.isFinite(styleParam) && styleParam >= 1 && styleParam <= pages.length
+        ? styleParam - 1
+        : 0;
+
+    return {
+      pageIndex: safePageIndex,
+      showIndex: params.get('index') === '1' || window.location.hash === '#index',
+    };
+  };
+
+  const buildAppUrl = (nextPageIndex: number, nextShowIndex: boolean) => {
+    if (typeof window === 'undefined') return '/';
+    const url = new URL(window.location.href);
+
+    if (nextShowIndex) {
+      url.searchParams.delete('style');
+      url.searchParams.set('index', '1');
+      url.hash = '';
+    } else {
+      url.searchParams.delete('index');
+      url.searchParams.set('style', String(nextPageIndex + 1));
+      if (url.hash === '#index') url.hash = '';
+    }
+
+    return `${url.pathname}${url.search}${url.hash}`;
+  };
+
+  const initialLocationState = parseLocationState();
+  const [pageIndex, setPageIndex] = useState(initialLocationState.pageIndex);
+  const [showIndex, setShowIndex] = useState(initialLocationState.showIndex);
+  const currentPageNumber = pageIndex + 1;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -262,15 +298,21 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const url = new URL(window.location.href);
-    if (showIndex) {
-      url.searchParams.set('index', '1');
-    } else {
-      url.searchParams.delete('index');
-      if (url.hash === '#index') url.hash = '';
-    }
-    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
-  }, [showIndex]);
+    window.history.replaceState({}, '', buildAppUrl(pageIndex, showIndex));
+  }, [pageIndex, showIndex]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handlePopState = () => {
+      const nextState = parseLocationState();
+      setPageIndex(nextState.pageIndex);
+      setShowIndex(nextState.showIndex);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [pages.length]);
 
   return (
     <div className="relative min-h-screen">
@@ -278,15 +320,24 @@ export default function App() {
 
       {!showIndex && (
         <div className="fixed left-4 top-4 z-[190] flex items-center gap-2">
-          <button
-            onClick={() => setShowIndex(true)}
+          <a
+            href={buildAppUrl(pageIndex, true)}
+            onClick={(event) => {
+              event.preventDefault();
+              setShowIndex(true);
+            }}
             className="rounded-full border border-black/15 bg-white/88 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-black shadow-[0_10px_30px_rgba(0,0,0,0.12)] backdrop-blur-md transition hover:bg-white"
           >
             Index
-          </button>
-          <div className="rounded-full border border-black/15 bg-white/88 px-3 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-black shadow-[0_10px_30px_rgba(0,0,0,0.12)] backdrop-blur-md">
+          </a>
+          <a
+            href={buildAppUrl(pageIndex, false)}
+            onClick={(event) => event.preventDefault()}
+            className="rounded-full border border-black/15 bg-white/88 px-3 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-black shadow-[0_10px_30px_rgba(0,0,0,0.12)] backdrop-blur-md"
+            title={`Style ${currentPageNumber}`}
+          >
             {currentPageNumber}
-          </div>
+          </a>
         </div>
       )}
 
@@ -295,19 +346,25 @@ export default function App() {
           <div className="mx-auto max-w-7xl p-8">
             <div className="mb-8 flex items-center justify-between">
               <h2 className="text-2xl font-medium tracking-tight text-black">Index</h2>
-              <button
-                onClick={() => setShowIndex(false)}
+              <a
+                href={buildAppUrl(pageIndex, false)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  setShowIndex(false);
+                }}
                 className="rounded-full p-2 text-black transition-colors hover:bg-black/5"
               >
                 <X size={32} />
-              </button>
+              </a>
             </div>
 
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
               {pages.map((_, index) => (
-                <button
+                <a
                   key={index}
-                  onClick={() => {
+                  href={buildAppUrl(index, false)}
+                  onClick={(event) => {
+                    event.preventDefault();
                     setPageIndex(index);
                     setShowIndex(false);
                   }}
@@ -318,7 +375,7 @@ export default function App() {
                   }`}
                 >
                   {index + 1}
-                </button>
+                </a>
               ))}
             </div>
           </div>
